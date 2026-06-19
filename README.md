@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Mi Rutina Diaria
 
-## Getting Started
+Aplicación web personal para organizar actividades cotidianas y llevar una bitácora de bienestar. Cada persona inicia sesión, consulta su calendario, marca las actividades del día y registra cómo se sintió junto con una nota diaria.
 
-First, run the development server:
+## Funcionalidades
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Inicio y cierre de sesión con Supabase Auth.
+- Calendario mensual con indicadores en los días que tienen actividad registrada.
+- Lista diaria de actividades recurrentes o asignadas a una fecha específica.
+- Marcado de actividades completadas únicamente para el día actual.
+- Registro del estado de ánimo de mañana y tarde.
+- Notas diarias de hasta 5,000 caracteres.
+- Creación, pausa y reactivación de actividades sin alterar su historial.
+- Interfaz adaptable para computadoras, tabletas y teléfonos.
+
+## Especificaciones del proyecto
+
+### Tecnologías
+
+| Área | Tecnología |
+| --- | --- |
+| Framework | Next.js 16 con App Router |
+| Interfaz | React 19 y Tailwind CSS 4 |
+| Componentes accesibles | Headless UI y Heroicons |
+| Autenticación y base de datos | Supabase Auth y PostgreSQL |
+| Cliente de Supabase | `@supabase/ssr` y `@supabase/supabase-js` |
+
+### Arquitectura
+
+- Los Server Components cargan la sesión y los datos directamente desde Supabase.
+- Las mutaciones de la interfaz se ejecutan mediante Server Actions con validación en el servidor.
+- `proxy.js` actualiza las cookies de autenticación y realiza redirecciones optimistas.
+- La autorización definitiva se comprueba en el acceso a datos y se refuerza con Row Level Security (RLS).
+- Los componentes cliente se limitan a las partes que requieren estado o interacción inmediata.
+
+### Modelo de datos
+
+| Tabla | Responsabilidad |
+| --- | --- |
+| `profiles` | Perfil asociado a cada usuario de Supabase Auth. |
+| `activities` | Actividades recurrentes o vinculadas a una fecha. |
+| `activity_pauses` | Intervalos durante los que una actividad queda pausada. |
+| `activity_logs` | Estado de cumplimiento de una actividad por fecha. |
+| `daily_notes` | Estados de ánimo y nota personal de cada día. |
+
+Todas las tablas de usuario tienen RLS habilitado. Las políticas restringen las lecturas y escrituras al propietario autenticado; las operaciones de pausa y reactivación se realizan mediante funciones PostgreSQL protegidas.
+
+### Reglas principales
+
+- Cada registro pertenece al usuario autenticado; el identificador nunca se acepta desde el cliente.
+- Una actividad recurrente aparece todos los días salvo durante sus periodos de pausa.
+- Una actividad no recurrente requiere una fecha específica.
+- El cumplimiento solo puede modificarse en la fecha actual.
+- Cada usuario puede tener un único registro de actividad y una única nota por fecha.
+- La zona horaria operativa para las reglas de fecha es `America/Mexico_City`.
+
+## Requisitos
+
+- Node.js compatible con Next.js 16.
+- npm.
+- Un proyecto de Supabase con autenticación por correo y contraseña.
+
+## Configuración local
+
+1. Instala las dependencias:
+
+   ```bash
+   npm install
+   ```
+
+2. Crea un archivo `.env.local` en la raíz:
+
+   ```env
+   NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
+   NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_clave_publicable_o_anon
+   ```
+
+3. En el SQL Editor de Supabase, ejecuta `supabase/schema.sql` para una instalación nueva. Si la base ya existe, aplica en orden los archivos de `supabase/migrations/` que aún no se hayan ejecutado.
+
+4. Crea los usuarios desde Supabase Auth o habilita el flujo de alta que corresponda al entorno. La aplicación actualmente ofrece inicio de sesión, no registro público.
+
+5. Inicia el servidor de desarrollo:
+
+   ```bash
+   npm run dev
+   ```
+
+6. Abre [http://localhost:3000](http://localhost:3000).
+
+Los archivos `.env*` están excluidos de Git para evitar publicar credenciales.
+
+## Comandos
+
+| Comando | Uso |
+| --- | --- |
+| `npm run dev` | Inicia el entorno de desarrollo. |
+| `npm run build` | Genera y valida la compilación de producción. |
+| `npm run start` | Sirve una compilación ya generada. |
+
+## Estructura principal
+
+```text
+app/
+├── components/          Componentes de interfaz y funcionalidades
+├── lib/                 Sesión, acceso a datos, fechas y Server Actions
+├── login/               Pantalla y formulario de autenticación
+├── error.js             Límite de errores de la aplicación
+├── loading.js           Estado de carga
+└── page.js              Vista principal autenticada
+supabase/
+├── migrations/          Cambios incrementales de la base de datos
+└── schema.sql            Esquema completo para instalaciones nuevas
+proxy.js                  Renovación de sesión y redirecciones
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Seguridad
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- La sesión se valida en el servidor mediante Supabase.
+- RLS permanece habilitado en las tablas con datos personales.
+- Las Server Actions validan identificadores, fechas, longitudes y valores permitidos.
+- La clave `service_role` no se utiliza ni debe exponerse en el navegador.
+- La clave pública de Supabase solo es segura mientras las políticas RLS permanezcan correctamente configuradas.

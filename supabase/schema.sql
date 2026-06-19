@@ -1,0 +1,364 @@
+-- Mi Rutina Diaria — canonical Supabase schema
+-- Run in a new Supabase project. Existing projects should run migrations/.
+
+create extension if not exists "pgcrypto";
+
+create table if not exists public.profiles (
+  id uuid primary key references auth.users(id) on delete cascade,
+  email text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.activities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 200),
+  is_recurring boolean not null default true,
+  specific_date date,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  constraint activities_id_user_unique unique (id, user_id),
+  constraint non_recurring_needs_date
+    check (is_recurring or specific_date is not null)
+);
+
+create table if not exists public.activity_pauses (
+  id uuid primary key default gen_random_uuid(),
+  activity_id uuid not null,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  paused_from date not null,
+  resumed_on date,
+  created_at timestamptz not null default now(),
+  constraint activity_pauses_activity_owner_fkey
+    foreign key (activity_id, user_id)
+    references public.activities(id, user_id)
+    on delete cascade,
+  constraint activity_pauses_valid_range
+    check (resumed_on is null or resumed_on >= paused_from)
+);
+
+create table if not exists public.activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  activity_id uuid not null,
+  log_date date not null,
+  completed boolean not null default false,
+  created_at timestamptz not null default now(),
+  constraint activity_logs_activity_owner_fkey
+    foreign key (activity_id, user_id)
+    references public.activities(id, user_id)
+    on delete cascade,
+  constraint activity_logs_user_activity_date_unique
+    unique (user_id, activity_id, log_date)
+);
+
+create table if not exists public.daily_notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  note_date date not null,
+  mood_morning text check (mood_morning in ('bad', 'ok', 'good', 'excellent')),
+  mood_evening text check (mood_evening in ('bad', 'ok', 'good', 'excellent')),
+  note_text text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  constraint daily_notes_user_date_unique unique (user_id, note_date),
+  constraint daily_notes_note_text_length
+    check (note_text is null or char_length(note_text) <= 5000)
+);
+
+create index if not exists idx_activities_user_active
+  on public.activities(user_id, is_active);
+create index if not exists idx_activities_specific_date
+  on public.activities(user_id, specific_date)
+  where specific_date is not null;
+create index if not exists idx_activity_logs_user_date
+  on public.activity_logs(user_id, log_date);
+create index if not exists idx_activity_logs_activity
+  on public.activity_logs(activity_id);
+create index if not exists idx_activity_pauses_user_activity
+  on public.activity_pauses(user_id, activity_id);
+create index if not exists idx_activity_pauses_user_dates
+  on public.activity_pauses(user_id, paused_from, resumed_on);
+create unique index if not exists idx_activity_pauses_one_open
+  on public.activity_pauses(activity_id)
+  where resumed_on is null;
+
+alter table public.profiles enable row level security;
+alter table public.activities enable row level security;
+alter table public.activity_pauses enable row level security;
+alter table public.activity_logs enable row level security;
+alter table public.daily_notes enable row level security;
+
+drop policy if exists "Users can view their own profile" on public.profiles;
+create policy "Users can view their own profile"
+  on public.profiles for select
+  to authenticated
+  using ((select auth.uid()) = id);
+
+drop policy if exists "Users can update their own profile" on public.profiles;
+create policy "Users can update their own profile"
+  on public.profiles for update
+  to authenticated
+  using ((select auth.uid()) = id)
+  with check ((select auth.uid()) = id);
+
+drop policy if exists "Users can view their own activities" on public.activities;
+create policy "Users can view their own activities"
+  on public.activities for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can insert their own activities" on public.activities;
+create policy "Users can insert their own activities"
+  on public.activities for insert
+  to authenticated
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can update their own activities" on public.activities;
+create policy "Users can update their own activities"
+  on public.activities for update
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can delete their own activities" on public.activities;
+create policy "Users can delete their own activities"
+  on public.activities for delete
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can view their own activity pauses" on public.activity_pauses;
+create policy "Users can view their own activity pauses"
+  on public.activity_pauses for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+revoke all on table public.activity_pauses from anon;
+revoke insert, update, delete on table public.activity_pauses from authenticated;
+grant select on table public.activity_pauses to authenticated;
+
+drop policy if exists "Users can view their own logs" on public.activity_logs;
+create policy "Users can view their own logs"
+  on public.activity_logs for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can insert their own logs" on public.activity_logs;
+create policy "Users can insert their own logs"
+  on public.activity_logs for insert
+  to authenticated
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can update their own logs" on public.activity_logs;
+create policy "Users can update their own logs"
+  on public.activity_logs for update
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can delete their own logs" on public.activity_logs;
+create policy "Users can delete their own logs"
+  on public.activity_logs for delete
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can view their own notes" on public.daily_notes;
+create policy "Users can view their own notes"
+  on public.daily_notes for select
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can insert their own notes" on public.daily_notes;
+create policy "Users can insert their own notes"
+  on public.daily_notes for insert
+  to authenticated
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can update their own notes" on public.daily_notes;
+create policy "Users can update their own notes"
+  on public.daily_notes for update
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
+
+drop policy if exists "Users can delete their own notes" on public.daily_notes;
+create policy "Users can delete their own notes"
+  on public.daily_notes for delete
+  to authenticated
+  using ((select auth.uid()) = user_id);
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_daily_notes_updated_at on public.daily_notes;
+create trigger trg_daily_notes_updated_at
+  before update on public.daily_notes
+  for each row execute function public.set_updated_at();
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  insert into public.profiles (id, email)
+  values (new.id, new.email)
+  on conflict (id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_on_auth_user_created on auth.users;
+create trigger trg_on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+create or replace function public.seed_default_activities(p_user_id uuid)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  insert into public.activities (user_id, name, is_recurring, is_active)
+  select p_user_id, defaults.name, true, true
+  from (
+    values
+      ('Gym'),
+      ('Estudiar'),
+      ('Tomar medicamento'),
+      ('Beber agua'),
+      ('Dormir temprano')
+  ) as defaults(name)
+  where not exists (
+    select 1
+    from public.activities
+    where user_id = p_user_id
+      and is_recurring
+      and name = defaults.name
+  );
+end;
+$$;
+
+create or replace function public.pause_activity(
+  p_activity_id uuid,
+  p_effective_date date
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_is_active boolean;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required' using errcode = '42501';
+  end if;
+
+  if p_effective_date is null then
+    raise exception 'Effective date is required' using errcode = '22004';
+  end if;
+
+  if p_effective_date <> (now() at time zone 'America/Mexico_City')::date then
+    raise exception 'Effective date must be today' using errcode = '22023';
+  end if;
+
+  select activities.is_active
+    into v_is_active
+  from public.activities as activities
+  where activities.id = p_activity_id
+    and activities.user_id = v_user_id
+  for update;
+
+  if not found then
+    raise exception 'Activity not found' using errcode = 'P0002';
+  end if;
+
+  if not v_is_active then
+    raise exception 'Activity is already paused' using errcode = '23514';
+  end if;
+
+  insert into public.activity_pauses (activity_id, user_id, paused_from)
+  values (p_activity_id, v_user_id, p_effective_date);
+
+  update public.activities
+  set is_active = false
+  where id = p_activity_id
+    and user_id = v_user_id;
+end;
+$$;
+
+create or replace function public.resume_activity(
+  p_activity_id uuid,
+  p_effective_date date
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_user_id uuid := auth.uid();
+  v_is_active boolean;
+  v_pause_id uuid;
+begin
+  if v_user_id is null then
+    raise exception 'Authentication required' using errcode = '42501';
+  end if;
+
+  if p_effective_date is null then
+    raise exception 'Effective date is required' using errcode = '22004';
+  end if;
+
+  if p_effective_date <> (now() at time zone 'America/Mexico_City')::date then
+    raise exception 'Effective date must be today' using errcode = '22023';
+  end if;
+
+  select activities.is_active
+    into v_is_active
+  from public.activities as activities
+  where activities.id = p_activity_id
+    and activities.user_id = v_user_id
+  for update;
+
+  if not found then
+    raise exception 'Activity not found' using errcode = 'P0002';
+  end if;
+
+  if v_is_active then
+    raise exception 'Activity is already active' using errcode = '23514';
+  end if;
+
+  update public.activity_pauses
+  set resumed_on = p_effective_date
+  where activity_id = p_activity_id
+    and user_id = v_user_id
+    and resumed_on is null
+    and paused_from <= p_effective_date
+  returning id into v_pause_id;
+
+  if v_pause_id is null then
+    raise exception 'Open pause not found' using errcode = 'P0002';
+  end if;
+
+  update public.activities
+  set is_active = true
+  where id = p_activity_id
+    and user_id = v_user_id;
+end;
+$$;
+
+revoke all on function public.pause_activity(uuid, date) from public, anon;
+revoke all on function public.resume_activity(uuid, date) from public, anon;
+grant execute on function public.pause_activity(uuid, date) to authenticated;
+grant execute on function public.resume_activity(uuid, date) to authenticated;

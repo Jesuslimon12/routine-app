@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"require\\('@heroicons/react/24/outline'\\)\")",
+      "Bash(npm install *)"
+    ]
+  }
+}
