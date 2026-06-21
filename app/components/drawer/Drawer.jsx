@@ -22,7 +22,7 @@ export function Drawer({ open, onClose, busy = false, children }) {
 
       <div className="fixed inset-0 overflow-hidden">
         <div className="absolute inset-0 overflow-hidden">
-          <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-4 sm:pl-16">
+          <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full sm:pl-16">
             <DialogPanel
               transition
               className="pointer-events-auto w-screen max-w-lg transform transition duration-300 ease-out data-closed:translate-x-full motion-reduce:transition-none"
