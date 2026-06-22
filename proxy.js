@@ -40,10 +40,11 @@ export async function proxy(request) {
   const { data: claimsData } = await supabase.auth.getClaims()
   const isAuthenticated = Boolean(claimsData?.claims?.sub)
 
-  const { pathname } = request.nextUrl
+  const { pathname, searchParams } = request.nextUrl
   const isPublicPath = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`)
   )
+  const isVerificationLanding = pathname === '/login' && searchParams.get('verified') === '1'
 
   function redirectWithRefreshedCookies(url) {
     const redirectResponse = NextResponse.redirect(url)
@@ -57,6 +58,16 @@ export async function proxy(request) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('redirectTo', pathname)
     return redirectWithRefreshedCookies(loginUrl)
+  }
+
+  if (isAuthenticated && isVerificationLanding) {
+    const { error } = await supabase.auth.signOut({ scope: 'local' })
+
+    if (error) {
+      console.error('[proxy:verificationSignOut]', error)
+    }
+
+    return response
   }
 
   if (isAuthenticated && isPublicPath) {

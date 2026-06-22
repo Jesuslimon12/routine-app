@@ -21,5 +21,11 @@ export async function GET(request) {
     return NextResponse.redirect(new URL('/login?error=confirmation', request.url))
   }
 
-  return NextResponse.redirect(new URL('/', request.url))
+  const { error: signOutError } = await supabase.auth.signOut({ scope: 'local' })
+
+  if (signOutError) {
+    console.error('[authConfirm:signOut]', signOutError)
+  }
+
+  return NextResponse.redirect(new URL('/login?verified=1', request.url))
 }

@@ -29,6 +29,8 @@ El rate limit se almacenará en PostgreSQL y se consumirá mediante una función
 
 La tarjeta de autenticación tendrá un selector accesible con dos opciones: “Iniciar sesión” y “Crear cuenta”. El control comunicará visualmente y mediante `aria` cuál panel está activo. Al cambiar, Framer Motion aplicará al contenido un fundido con desplazamiento vertical breve de 200–250 ms. La animación no afectará el resto de la página y se reducirá cuando el sistema solicite menos movimiento.
 
+En pantallas móviles, la introducción editorial superior se mostrará en login y se ocultará durante el registro para priorizar los campos y evitar desplazamiento vertical innecesario.
+
 Se reutilizarán `Button`, los tokens de Tailwind y los patrones de foco actuales. Los campos tendrán etiquetas persistentes, atributos `autocomplete`, ayuda asociada mediante `aria-describedby` y errores próximos al campo. La jerarquía usará la paleta ciruela existente, escala de 8 px, contraste WCAG AA y controles de al menos 44 px.
 
 El registro mostrará:
@@ -36,9 +38,9 @@ El registro mostrará:
 1. Correo electrónico.
 2. Contraseña.
 3. Confirmar contraseña.
-4. Una lista compacta de requisitos de contraseña que se actualiza sin sustituir la validación del servidor.
+4. Una línea compacta que indica los requisitos pendientes y cambia a “Contraseña segura” cuando todos se cumplen, sin sustituir la validación del servidor.
 
-Después de un registro aceptado, la tarjeta mostrará un estado de éxito que pide revisar el correo y permite volver al login. No se iniciará sesión automáticamente.
+Después de un registro aceptado, la tarjeta mostrará un estado de éxito que pide revisar el correo y permite volver al login. Al abrir el enlace, la cuenta se confirmará, se cerrará la sesión temporal de Supabase y se regresará al login con el mensaje “Cuenta verificada. Ya puedes iniciar sesión”. No se accederá automáticamente al dashboard.
 
 El login conservará correo y contraseña, con copy más directo y estados de error accesibles. La complejidad de contraseña nueva no se impondrá al login, para no bloquear cuentas existentes con credenciales anteriores.
 

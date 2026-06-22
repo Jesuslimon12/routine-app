@@ -10,6 +10,9 @@ export default async function LoginPage({ searchParams }) {
   const initialError = query?.error === 'confirmation'
     ? 'El enlace de confirmación no es válido o ya venció. Solicita un registro nuevo.'
     : null
+  const initialSuccess = query?.verified === '1'
+    ? 'Cuenta verificada. Ya puedes iniciar sesión.'
+    : null
 
   return (
     <main className="min-h-dvh bg-surface-page px-4 py-4 sm:px-6 sm:py-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(28rem,0.78fr)] lg:gap-6 lg:p-6">
@@ -45,8 +48,8 @@ export default async function LoginPage({ searchParams }) {
         </div>
       </section>
 
-      <section className="mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-md flex-col justify-center py-6 sm:min-h-[calc(100dvh-3rem)] sm:py-8 lg:min-h-0 lg:py-12">
-        <div className="mb-8 lg:hidden">
+      <section className="group mx-auto flex min-h-[calc(100dvh-2rem)] w-full max-w-md flex-col justify-center py-6 sm:min-h-[calc(100dvh-3rem)] sm:py-8 lg:min-h-0 lg:py-12">
+        <div className="mb-8 group-has-[#register-panel]:hidden lg:hidden">
           <div className="mb-8 flex items-center gap-3">
             <span className="grid size-10 place-items-center rounded-xl bg-brand-500 text-sm font-bold text-white">R</span>
             <span className="font-semibold text-text-primary">Mi Rutina Diaria</span>
@@ -56,10 +59,10 @@ export default async function LoginPage({ searchParams }) {
         </div>
 
         <div className="rounded-2xl border border-border-default bg-surface-card p-6 shadow-sm sm:p-8">
-          <LoginForm initialError={initialError} />
+          <LoginForm initialError={initialError} initialSuccess={initialSuccess} />
         </div>
 
-        <p className="mt-5 text-center text-xs leading-5 text-text-tertiary">
+        <p className="mt-4 text-center text-xs leading-5 text-text-tertiary sm:mt-5">
           Tus datos están protegidos y nunca guardamos tu contraseña directamente.
         </p>
       </section>

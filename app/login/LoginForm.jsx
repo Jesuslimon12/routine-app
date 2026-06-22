@@ -73,12 +73,25 @@ function FormError({ message }) {
   )
 }
 
-function SignInForm({ initialError }) {
+function FormSuccess({ message }) {
+  if (!message) return null
+
+  return (
+    <div role="status" className="flex gap-2.5 rounded-xl border border-success/20 bg-success-light px-3.5 py-3 text-sm text-success">
+      <CheckIcon aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+      <p>{message}</p>
+    </div>
+  )
+}
+
+function SignInForm({ initialError, initialSuccess }) {
   const [state, formAction, pending] = useActionState(loginAction, INITIAL_STATE)
   const errors = state.fieldErrors || {}
 
   return (
     <form action={formAction} className="space-y-5" noValidate>
+      <FormSuccess message={initialSuccess} />
+
       <AuthField
         id="login-email"
         name="email"
@@ -237,7 +250,7 @@ function RegisterForm({ onBack }) {
   )
 }
 
-export function LoginForm({ initialError = null }) {
+export function LoginForm({ initialError = null, initialSuccess = null }) {
   const [mode, setMode] = useState('login')
   const reduceMotion = useReducedMotion()
   const isLogin = mode === 'login'
@@ -300,7 +313,7 @@ export function LoginForm({ initialError = null }) {
           </p>
 
           {isLogin ? (
-            <SignInForm initialError={initialError} />
+            <SignInForm initialError={initialError} initialSuccess={initialSuccess} />
           ) : (
             <RegisterForm onBack={() => selectMode('login')} />
           )}
