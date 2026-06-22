@@ -4,7 +4,7 @@ Aplicación web personal para organizar actividades cotidianas y llevar una bit�
 
 ## Funcionalidades
 
-- Inicio y cierre de sesión con Supabase Auth.
+- Registro con contraseña segura, confirmación por correo, inicio y cierre de sesión con Supabase Auth.
 - Calendario mensual con indicadores en los días que tienen actividad registrada.
 - Lista diaria de actividades programadas todos los días, para una fecha específica o durante un rango.
 - Marcado de actividades completadas únicamente para el día actual.
@@ -77,19 +77,23 @@ Todas las tablas de usuario tienen RLS habilitado. Las políticas restringen las
    ```env
    NEXT_PUBLIC_SUPABASE_URL=https://tu-proyecto.supabase.co
    NEXT_PUBLIC_SUPABASE_ANON_KEY=tu_clave_publicable_o_anon
+   NEXT_PUBLIC_SITE_URL=http://localhost:3000
+   AUTH_RATE_LIMIT_SECRET=un_secreto_aleatorio_de_al_menos_32_bytes
    ```
 
 3. En el SQL Editor de Supabase, ejecuta `supabase/schema.sql` para una instalación nueva. Si la base ya existe, aplica en orden los archivos de `supabase/migrations/` que aún no se hayan ejecutado.
 
-4. Crea los usuarios desde Supabase Auth o habilita el flujo de alta que corresponda al entorno. La aplicación actualmente ofrece inicio de sesión, no registro público.
+4. En Supabase Auth, habilita la confirmación por correo y agrega `http://localhost:3000/auth/confirm` y la URL equivalente de producción a las Redirect URLs permitidas.
 
-5. Inicia el servidor de desarrollo:
+5. En Vercel configura `NEXT_PUBLIC_SITE_URL` con el dominio público y `AUTH_RATE_LIMIT_SECRET` con un valor aleatorio privado. No reutilices la clave pública de Supabase como secreto.
+
+6. Inicia el servidor de desarrollo:
 
    ```bash
    npm run dev
    ```
 
-6. Abre [http://localhost:3000](http://localhost:3000).
+7. Abre [http://localhost:3000](http://localhost:3000).
 
 Los archivos `.env*` están excluidos de Git para evitar publicar credenciales.
 
@@ -100,6 +104,7 @@ Los archivos `.env*` están excluidos de Git para evitar publicar credenciales.
 | `npm run dev` | Inicia el entorno de desarrollo. |
 | `npm run build` | Genera y valida la compilación de producción. |
 | `npm run start` | Sirve una compilación ya generada. |
+| `npm test` | Ejecuta las pruebas de validación de autenticación. |
 
 ## Estructura principal
 
@@ -122,5 +127,7 @@ proxy.js                  Renovación de sesión y redirecciones
 - La sesión se valida en el servidor mediante Supabase.
 - RLS permanece habilitado en las tablas con datos personales.
 - Las Server Actions validan identificadores, fechas, longitudes y valores permitidos.
+- Zod valida en el servidor el correo y las reglas de contraseña del registro.
+- Login y registro tienen límites distribuidos por IP y correo antes de llamar a Supabase Auth.
 - La clave `service_role` no se utiliza ni debe exponerse en el navegador.
 - La clave pública de Supabase solo es segura mientras las políticas RLS permanezcan correctamente configuradas.

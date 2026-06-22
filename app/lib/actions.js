@@ -2,23 +2,25 @@
 
 import { redirect } from 'next/navigation'
 import { refresh } from 'next/cache'
+import { headers } from 'next/headers'
 import { verifySession } from './dal'
 import { isValidDateString, todayString } from './dates'
 import { createServerClient } from './supabase'
 import { toggleLog, upsertNote } from './db'
+import { consumeAuthRateLimit } from './auth-rate-limit'
+import { firstFieldErrors, loginSchema, registerSchema } from './auth-schemas'
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const VALID_MOODS = new Set(['bad', 'ok', 'good', 'excellent'])
 const VALID_SCHEDULE_TYPES = new Set(['daily', 'single', 'range'])
 const NOTE_MAX_LENGTH = 5000
 
-function failure(error) {
-  return { status: 'error', error }
+function failure(error, fieldErrors = {}) {
+  return { status: 'error', error, fieldErrors }
 }
 
 function success() {
-  return { status: 'success', error: null }
+  return { status: 'success', error: null, fieldErrors: {} }
 }
 
 function reportActionError(context, error) {
@@ -52,21 +54,91 @@ function readActivitySchedule(formData) {
 }
 
 export async function loginAction(_previousState, formData) {
-  const email = formData.get('email')?.toString().trim()
-  const password = formData.get('password')?.toString()
+  const result = loginSchema.safeParse({
+    email: formData.get('email'),
+    password: formData.get('password'),
+  })
 
-  if (!email || !EMAIL_PATTERN.test(email) || email.length > 254 || !password) {
-    return failure('Ingresa un correo válido y tu contraseña.')
+  if (!result.success) {
+    return failure('Revisa los campos marcados.', firstFieldErrors(result.error))
+  }
+
+  const rateLimit = await consumeAuthRateLimit('login', result.data.email)
+
+  if (rateLimit.unavailable) {
+    return failure('No fue posible validar la solicitud. Inténtalo de nuevo en unos minutos.')
+  }
+
+  if (!rateLimit.allowed) {
+    const minutes = Math.max(1, Math.ceil(rateLimit.retryAfterSeconds / 60))
+    return failure(`Demasiados intentos. Inténtalo de nuevo en ${minutes} min.`)
   }
 
   const supabase = await createServerClient()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { error } = await supabase.auth.signInWithPassword(result.data)
 
   if (error) {
-    return failure('Credenciales incorrectas. Verifica tu correo y contraseña.')
+    return failure('No pudimos iniciar sesión. Verifica tus datos o confirma tu correo.')
   }
 
   redirect('/')
+}
+
+export async function registerAction(_previousState, formData) {
+  const result = registerSchema.safeParse({
+    email: formData.get('email'),
+    password: formData.get('password'),
+    confirmPassword: formData.get('confirmPassword'),
+  })
+
+  if (!result.success) {
+    return failure('Revisa los campos marcados.', firstFieldErrors(result.error))
+  }
+
+  const rateLimit = await consumeAuthRateLimit('register', result.data.email)
+
+  if (rateLimit.unavailable) {
+    return failure('No fue posible validar la solicitud. Inténtalo de nuevo en unos minutos.')
+  }
+
+  if (!rateLimit.allowed) {
+    const minutes = Math.max(1, Math.ceil(rateLimit.retryAfterSeconds / 60))
+    return failure(`Demasiadas solicitudes. Inténtalo de nuevo en ${minutes} min.`)
+  }
+
+  const requestHeaders = await headers()
+  const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, '')
+  const vercelSiteUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+    : null
+  const localHost = requestHeaders.get('host')
+  const localSiteUrl = process.env.NODE_ENV !== 'production' && localHost
+    ? `http://${localHost}`
+    : null
+  const siteUrl = configuredSiteUrl || vercelSiteUrl || localSiteUrl
+
+  if (!siteUrl) {
+    reportActionError('registerAction', new Error('Missing NEXT_PUBLIC_SITE_URL.'))
+    return failure('No pudimos crear la cuenta. Inténtalo de nuevo más tarde.')
+  }
+
+  const supabase = await createServerClient()
+  const { error } = await supabase.auth.signUp({
+    email: result.data.email,
+    password: result.data.password,
+    options: { emailRedirectTo: `${siteUrl}/auth/confirm` },
+  })
+
+  if (error) {
+    if (error.code === 'user_already_exists' || error.code === 'email_exists') {
+      return success()
+    }
+
+    reportActionError('registerAction', error)
+    return failure('No pudimos crear la cuenta. Inténtalo de nuevo más tarde.')
+  }
+
+  return success()
 }
 
 export async function logoutAction() {
