@@ -6,11 +6,12 @@ Aplicación web personal para organizar actividades cotidianas y llevar una bit�
 
 - Inicio y cierre de sesión con Supabase Auth.
 - Calendario mensual con indicadores en los días que tienen actividad registrada.
-- Lista diaria de actividades recurrentes o asignadas a una fecha específica.
+- Lista diaria de actividades programadas todos los días, para una fecha específica o durante un rango.
 - Marcado de actividades completadas únicamente para el día actual.
 - Registro del estado de ánimo de mañana y tarde.
 - Notas diarias de hasta 5,000 caracteres.
-- Creación, pausa y reactivación de actividades sin alterar su historial.
+- Creación, edición, duplicación, pausa y reactivación de actividades sin alterar su historial anterior.
+- Prevención de actividades duplicadas con el mismo nombre y fechas superpuestas.
 - Interfaz adaptable para computadoras, tabletas y teléfonos.
 
 ## Especificaciones del proyecto
@@ -21,6 +22,7 @@ Aplicación web personal para organizar actividades cotidianas y llevar una bit�
 | --- | --- |
 | Framework | Next.js 16 con App Router |
 | Interfaz | React 19 y Tailwind CSS 4 |
+| Animaciones | Framer Motion 12 |
 | Componentes accesibles | Headless UI y Heroicons |
 | Autenticación y base de datos | Supabase Auth y PostgreSQL |
 | Cliente de Supabase | `@supabase/ssr` y `@supabase/supabase-js` |
@@ -38,7 +40,7 @@ Aplicación web personal para organizar actividades cotidianas y llevar una bit�
 | Tabla | Responsabilidad |
 | --- | --- |
 | `profiles` | Perfil asociado a cada usuario de Supabase Auth. |
-| `activities` | Actividades recurrentes o vinculadas a una fecha. |
+| `activities` | Actividades diarias, de fecha única o de rango, con fechas de vigencia. |
 | `activity_pauses` | Intervalos durante los que una actividad queda pausada. |
 | `activity_logs` | Estado de cumplimiento de una actividad por fecha. |
 | `daily_notes` | Estados de ánimo y nota personal de cada día. |
@@ -48,8 +50,10 @@ Todas las tablas de usuario tienen RLS habilitado. Las políticas restringen las
 ### Reglas principales
 
 - Cada registro pertenece al usuario autenticado; el identificador nunca se acepta desde el cliente.
-- Una actividad recurrente aparece todos los días salvo durante sus periodos de pausa.
-- Una actividad no recurrente requiere una fecha específica.
+- Una actividad diaria aparece desde su fecha inicial salvo durante sus periodos de pausa.
+- Una actividad de fecha única solo aparece el día programado; una actividad de rango aparece cada día entre sus fechas inicial y final.
+- La edición conserva el historial anterior y aplica la nueva programación desde la fecha efectiva.
+- No pueden existir actividades del mismo usuario con el mismo nombre y periodos superpuestos.
 - El cumplimiento solo puede modificarse en la fecha actual.
 - Cada usuario puede tener un único registro de actividad y una única nota por fecha.
 - La zona horaria operativa para las reglas de fecha es `America/Mexico_City`.

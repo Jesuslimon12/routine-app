@@ -7,7 +7,7 @@
  * Fetches all active activities for a user on a specific date,
  * joined with their completion status for that date.
  *
- * Activities are included if they are recurring OR their specific_date matches.
+ * Activities are included when the date falls inside their schedule.
  *
  * @param {import('@supabase/supabase-js').SupabaseClient} supabase
  * @param {string} userId
@@ -15,27 +15,15 @@
  * @returns {Promise<Array>}
  */
 export async function getActivitiesForDay(supabase, userId, date) {
-  const [recurringResult, specificResult] = await Promise.all([
-    supabase
-      .from('activities')
-      .select('id, name, is_recurring, specific_date, created_at')
-      .eq('user_id', userId)
-      .eq('is_recurring', true),
-    supabase
-      .from('activities')
-      .select('id, name, is_recurring, specific_date, created_at')
-      .eq('user_id', userId)
-      .eq('is_recurring', false)
-      .eq('specific_date', date),
-  ])
+  const { data: allActivities, error: activitiesError } = await supabase
+    .from('activities')
+    .select('id, name, schedule_type, start_date, end_date, created_at')
+    .eq('user_id', userId)
+    .lte('start_date', date)
+    .or(`end_date.is.null,end_date.gte.${date}`)
+    .order('created_at', { ascending: true })
 
-  if (recurringResult.error) throw recurringResult.error
-  if (specificResult.error) throw specificResult.error
-
-  const allActivities = [
-    ...(recurringResult.data ?? []),
-    ...(specificResult.data ?? []),
-  ]
+  if (activitiesError) throw activitiesError
 
   if (allActivities.length === 0) return []
 
@@ -43,7 +31,7 @@ export async function getActivitiesForDay(supabase, userId, date) {
   const [logsResult, pausesResult] = await Promise.all([
     supabase
       .from('activity_logs')
-      .select('activity_id, completed')
+      .select('activity_id')
       .eq('user_id', userId)
       .eq('log_date', date)
       .in('activity_id', activityIds),
@@ -58,8 +46,8 @@ export async function getActivitiesForDay(supabase, userId, date) {
   if (logsResult.error) throw logsResult.error
   if (pausesResult.error) throw pausesResult.error
 
-  const logMap = new Map(
-    (logsResult.data ?? []).map((log) => [log.activity_id, log.completed])
+  const completedActivityIds = new Set(
+    (logsResult.data ?? []).map((log) => log.activity_id)
   )
   const pausedActivityIds = new Set(
     (pausesResult.data ?? [])
@@ -68,10 +56,12 @@ export async function getActivitiesForDay(supabase, userId, date) {
   )
 
   return allActivities
-    .filter((activity) => !pausedActivityIds.has(activity.id))
+    .filter((activity) => (
+      activity.schedule_type !== 'daily' || !pausedActivityIds.has(activity.id)
+    ))
     .map((activity) => ({
       ...activity,
-      completed: logMap.get(activity.id) ?? false,
+      completed: completedActivityIds.has(activity.id),
     }))
 }
 
@@ -86,7 +76,7 @@ export async function getActivitiesForDay(supabase, userId, date) {
 export async function getActivitiesForManager(supabase, userId) {
   const { data: activities, error: activitiesError } = await supabase
     .from('activities')
-    .select('id, name, is_recurring, specific_date, is_active, created_at')
+    .select('id, name, schedule_type, start_date, end_date, is_active, created_at')
     .eq('user_id', userId)
     .order('created_at', { ascending: true })
 
@@ -200,17 +190,26 @@ export async function upsertNote(supabase, userId, date, data) {
  * @returns {Promise<object>}
  */
 export async function toggleLog(supabase, userId, activityId, date, completed) {
-  const { error } = await supabase
-    .from('activity_logs')
-    .upsert(
-      {
-        user_id: userId,
-        activity_id: activityId,
-        log_date: date,
-        completed,
-      },
-      { onConflict: 'user_id,activity_id,log_date' }
-    )
+  const query = completed
+    ? supabase
+        .from('activity_logs')
+        .upsert(
+          {
+            user_id: userId,
+            activity_id: activityId,
+            log_date: date,
+            completed: true,
+          },
+          { onConflict: 'user_id,activity_id,log_date' }
+        )
+    : supabase
+        .from('activity_logs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('activity_id', activityId)
+        .eq('log_date', date)
+
+  const { error } = await query
 
   if (error) throw error
 }

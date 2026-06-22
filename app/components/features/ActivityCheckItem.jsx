@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { LockClosedIcon } from '@heroicons/react/24/outline'
 import { toggleActivityCheck } from '@/app/lib/actions'
 import { Checkbox } from '@/app/components/ui/Checkbox'
+import { isFuture, isPast } from '@/app/lib/dates'
 
 /**
  * ActivityCheckItem — single activity row with optimistic toggle.
@@ -17,6 +18,9 @@ export function ActivityCheckItem({ activity, date, isToday }) {
   const [optimisticChecked, setOptimisticChecked] = useState(activity.completed)
   const [error, setError] = useState(null)
   const [isPending, startTransition] = useTransition()
+  const statusLabel = isPast(date)
+    ? optimisticChecked ? 'Completada' : 'No realizada'
+    : isFuture(date) ? 'Programada' : null
 
   async function handleChange(checked) {
     if (!isToday) return
@@ -37,13 +41,22 @@ export function ActivityCheckItem({ activity, date, isToday }) {
 
   return (
     <div className="flex items-center gap-2 group">
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <Checkbox
           checked={optimisticChecked}
           onChange={handleChange}
           label={activity.name}
           disabled={!isToday || isPending}
         />
+        {statusLabel ? (
+          <span
+            className={optimisticChecked
+              ? 'ml-8 mt-1 inline-block text-xs font-semibold text-success'
+              : 'ml-8 mt-1 inline-block text-xs font-medium text-text-tertiary'}
+          >
+            {statusLabel}
+          </span>
+        ) : null}
       </div>
 
       {/* Lock hint for non-today dates */}

@@ -57,7 +57,7 @@ export default async function Home({ searchParams }) {
           </div>
 
           <div className="flex items-center gap-1 sm:gap-3">
-            <ActivityManagerDrawer activities={managedActivities} />
+            <ActivityManagerDrawer activities={managedActivities} today={today} />
             <form action={logoutAction}>
               <Button type="submit" variant="ghost" size="sm">
                 Salir

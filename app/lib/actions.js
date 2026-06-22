@@ -10,6 +10,7 @@ import { toggleLog, upsertNote } from './db'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const VALID_MOODS = new Set(['bad', 'ok', 'good', 'excellent'])
+const VALID_SCHEDULE_TYPES = new Set(['daily', 'single', 'range'])
 const NOTE_MAX_LENGTH = 5000
 
 function failure(error) {
@@ -22,6 +23,32 @@ function success() {
 
 function reportActionError(context, error) {
   console.error(`[${context}]`, error)
+}
+
+function isDuplicateActivityError(error) {
+  return error?.code === '23505' && error?.message?.includes('duplicate_activity')
+}
+
+function readActivitySchedule(formData) {
+  const scheduleType = formData.get('schedule_type')?.toString()
+  const startDate = formData.get('start_date')?.toString().trim()
+  const submittedEndDate = formData.get('end_date')?.toString().trim() || null
+
+  if (!VALID_SCHEDULE_TYPES.has(scheduleType) || !isValidDateString(startDate)) {
+    return { error: 'Selecciona una programación válida.' }
+  }
+
+  const endDate = scheduleType === 'daily'
+    ? null
+    : scheduleType === 'single'
+      ? startDate
+      : submittedEndDate
+
+  if (scheduleType === 'range' && (!isValidDateString(endDate) || endDate < startDate)) {
+    return { error: 'La fecha final debe ser igual o posterior a la inicial.' }
+  }
+
+  return { scheduleType, startDate, endDate, error: null }
 }
 
 export async function loginAction(_previousState, formData) {
@@ -56,9 +83,9 @@ export async function logoutAction() {
 
 export async function toggleActivityCheck(activityId, date, completed) {
   if (
-    !UUID_PATTERN.test(activityId ?? '') ||
-    !isValidDateString(date) ||
-    typeof completed !== 'boolean'
+    !UUID_PATTERN.test(activityId ?? '')
+    || !isValidDateString(date)
+    || typeof completed !== 'boolean'
   ) {
     return failure('Datos de actividad inválidos.')
   }
@@ -71,10 +98,9 @@ export async function toggleActivityCheck(activityId, date, completed) {
   const user = await verifySession(supabase)
   const { data: activity, error: activityError } = await supabase
     .from('activities')
-    .select('id')
+    .select('id, schedule_type, start_date, end_date, is_active')
     .eq('id', activityId)
     .eq('user_id', user.id)
-    .eq('is_active', true)
     .maybeSingle()
 
   if (activityError) {
@@ -84,6 +110,14 @@ export async function toggleActivityCheck(activityId, date, completed) {
 
   if (!activity) {
     return failure('La actividad no existe o no te pertenece.')
+  }
+
+  const isScheduled = date >= activity.start_date
+    && (activity.end_date === null || date <= activity.end_date)
+  const isAvailable = activity.schedule_type !== 'daily' || activity.is_active
+
+  if (!isScheduled || !isAvailable) {
+    return failure('La actividad no está disponible para el día de hoy.')
   }
 
   try {
@@ -99,35 +133,74 @@ export async function toggleActivityCheck(activityId, date, completed) {
 
 export async function addActivity(_previousState, formData) {
   const name = formData.get('name')?.toString().trim()
-  const recurrenceValue = formData.get('is_recurring')?.toString()
-  const specificDate = formData.get('specific_date')?.toString().trim() || null
+  const schedule = readActivitySchedule(formData)
 
   if (!name || name.length > 200) {
     return failure('El nombre debe tener entre 1 y 200 caracteres.')
   }
 
-  if (recurrenceValue !== 'true' && recurrenceValue !== 'false') {
-    return failure('Selecciona una frecuencia válida.')
+  if (schedule.error) {
+    return failure(schedule.error)
   }
 
-  const isRecurring = recurrenceValue === 'true'
-  if (!isRecurring && !isValidDateString(specificDate)) {
-    return failure('Selecciona una fecha válida.')
+  if (schedule.startDate < todayString()) {
+    return failure('La actividad debe comenzar hoy o en una fecha futura.')
   }
 
   const supabase = await createServerClient()
-  const user = await verifySession(supabase)
-  const { error } = await supabase.from('activities').insert({
-    user_id: user.id,
-    name,
-    is_recurring: isRecurring,
-    specific_date: isRecurring ? null : specificDate,
-    is_active: true,
+  await verifySession(supabase)
+  const { error } = await supabase.rpc('create_activity', {
+    p_name: name,
+    p_schedule_type: schedule.scheduleType,
+    p_start_date: schedule.startDate,
+    p_end_date: schedule.endDate,
   })
 
   if (error) {
     reportActionError('addActivity', error)
+    if (isDuplicateActivityError(error)) {
+      return failure('Ya existe una actividad igual para esas fechas.')
+    }
     return failure('No fue posible agregar la actividad.')
+  }
+
+  refresh()
+  return success()
+}
+
+export async function editActivity(activityId, _previousState, formData) {
+  if (!UUID_PATTERN.test(activityId ?? '')) {
+    return failure('La actividad no es válida.')
+  }
+
+  const name = formData.get('name')?.toString().trim()
+  const schedule = readActivitySchedule(formData)
+
+  if (!name || name.length > 200) {
+    return failure('El nombre debe tener entre 1 y 200 caracteres.')
+  }
+
+  if (schedule.error) {
+    return failure(schedule.error)
+  }
+
+  const supabase = await createServerClient()
+  await verifySession(supabase)
+  const { error } = await supabase.rpc('edit_activity', {
+    p_activity_id: activityId,
+    p_name: name,
+    p_schedule_type: schedule.scheduleType,
+    p_start_date: schedule.startDate,
+    p_end_date: schedule.endDate,
+    p_effective_date: todayString(),
+  })
+
+  if (error) {
+    reportActionError('editActivity', error)
+    if (isDuplicateActivityError(error)) {
+      return failure('Ya existe una actividad igual para esas fechas.')
+    }
+    return failure('No fue posible guardar los cambios de la actividad.')
   }
 
   refresh()
