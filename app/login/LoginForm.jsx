@@ -12,9 +12,17 @@ const INPUT_CLASS =
   'min-h-12 w-full rounded-xl border bg-surface-card px-4 py-2.5 text-base text-text-primary ' +
   'placeholder:text-text-tertiary transition-colors duration-150 focus:outline-2 focus:outline-offset-0 ' +
   'disabled:cursor-not-allowed disabled:bg-surface-sunken disabled:opacity-60'
+const COMPACT_REQUIREMENT_LABELS = {
+  length: '12 caracteres',
+  lowercase: 'una minúscula',
+  uppercase: 'una mayúscula',
+  number: 'un número',
+  symbol: 'un símbolo',
+}
+const SPANISH_LIST = new Intl.ListFormat('es', { style: 'short', type: 'conjunction' })
 
-function AuthField({ id, label, error, hint, className = '', ...inputProps }) {
-  const describedBy = [hint ? `${id}-hint` : null, error ? `${id}-error` : null]
+function AuthField({ id, label, error, hint, descriptionId, className = '', ...inputProps }) {
+  const describedBy = [descriptionId, hint ? `${id}-hint` : null, error ? `${id}-error` : null]
     .filter(Boolean)
     .join(' ') || undefined
 
@@ -115,34 +123,26 @@ function SignInForm({ initialError }) {
 }
 
 function PasswordRequirements({ password }) {
-  return (
-    <div aria-live="polite" className="rounded-xl bg-surface-sunken px-4 py-3">
-      <p className="mb-2 text-xs font-bold uppercase tracking-[0.12em] text-text-secondary">
-        Tu contraseña necesita
-      </p>
-      <ul className="grid gap-1.5 sm:grid-cols-2">
-        {PASSWORD_REQUIREMENTS.map((requirement) => {
-          const met = requirement.test(password)
+  const missingRequirements = PASSWORD_REQUIREMENTS
+    .filter((requirement) => !requirement.test(password))
+    .map((requirement) => COMPACT_REQUIREMENT_LABELS[requirement.key])
+  const isSecure = missingRequirements.length === 0
 
-          return (
-            <li
-              key={requirement.key}
-              className={`flex items-start gap-2 text-sm ${met ? 'text-success' : 'text-text-secondary'}`}
-            >
-              <span
-                aria-hidden="true"
-                className={`mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border ${
-                  met ? 'border-success bg-success text-white' : 'border-neutral-300'
-                }`}
-              >
-                {met ? <CheckIcon className="size-3" /> : null}
-              </span>
-              {requirement.label}
-            </li>
-          )
-        })}
-      </ul>
-    </div>
+  return (
+    <p
+      id="register-password-requirements"
+      aria-live="polite"
+      className={`flex min-h-5 items-start gap-1.5 text-xs leading-5 ${
+        isSecure ? 'font-semibold text-success' : 'text-text-secondary'
+      }`}
+    >
+      {isSecure ? <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" /> : null}
+      <span>
+        {isSecure
+          ? 'Contraseña segura.'
+          : `Faltan: ${SPANISH_LIST.format(missingRequirements)}.`}
+      </span>
+    </p>
   )
 }
 
@@ -199,6 +199,7 @@ function RegisterForm({ onBack }) {
         required
         disabled={pending}
         error={errors.password}
+        descriptionId="register-password-requirements"
         value={password}
         onChange={(event) => setPassword(event.target.value)}
         placeholder="Crea una contraseña segura"

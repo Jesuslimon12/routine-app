@@ -60,7 +60,7 @@ export default async function LoginPage({ searchParams }) {
         </div>
 
         <p className="mt-5 text-center text-xs leading-5 text-text-tertiary">
-          Tus datos están protegidos por Supabase y nunca guardamos tu contraseña directamente.
+          Tus datos están protegidos y nunca guardamos tu contraseña directamente.
         </p>
       </section>
     </main>
